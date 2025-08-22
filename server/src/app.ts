@@ -2,6 +2,8 @@ import express, { Request, Response } from "express";
 import cookieparser from "cookie-parser";
 import cors from "cors";
 
+import authRoutes from "./routes/auth.route";
+
 const app = express();
 
 app.use(express.json());
@@ -12,6 +14,8 @@ app.use(cors({
     credentials: true
 }));
 app.use(cookieparser());
+
+app.use('/ciphershare-api/v1/auth', authRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello World');
