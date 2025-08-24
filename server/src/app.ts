@@ -3,6 +3,7 @@ import cookieparser from "cookie-parser";
 import cors from "cors";
 
 import authRoutes from "./routes/auth.route";
+import fileRoutes from "./routes/file.route";
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(cors({
 app.use(cookieparser());
 
 app.use('/ciphershare-api/v1/auth', authRoutes);
+app.use('/ciphershare-api/v1/file', fileRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello World');
