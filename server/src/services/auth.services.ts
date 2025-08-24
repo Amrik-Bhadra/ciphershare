@@ -7,6 +7,7 @@ import userRepository from "../repositories/user.repository";
 import refreshTokenRepository from "../repositories/refreshToken.repository";
 import { IRefreshTokenRepository } from "../interfaces/IRefreshTokenRepository";
 import { LoginDTO, RegisterDTO } from "../dtos/auth.dto";
+import prisma from "../utils/prisma";
 
 const generateTokens = (user: User) => {
     const accessToken = jwt.sign(
@@ -72,18 +73,63 @@ class AuthService {
         }
     }
 
-    async refreshToken(token: string): Promise<string | null> {
-        console.log('inside refreshToken service');
+    // async refreshToken(token: string): Promise<string | null> {
+    //     console.log('inside refreshToken service');
+    //     const tokenInDb = await refreshTokenRepository.findByToken(token);
+    //     if (!tokenInDb) {
+    //         return null;
+    //     }
+
+    //     const decoded = jwt.verify(token, process.env.REFRESH_SECRET!) as { id: string };
+    //     const user = await userRepository.findUserById(decoded.id);
+    //     if (!user) {
+    //         return null;
+    //     }
+
+    //     const { accessToken } = generateTokens(user);
+    //     return accessToken;
+    // }
+
+    /**
+   * Rotate refresh token atomically. If old token is already gone (deleted by another
+   * concurrent refresh), we throw a specific error so caller can treat as reuse/double-refresh.
+   */
+    async rotateRefreshToken(userId: string, oldHashedToken: string, newHashedToken: string) {
+        return prisma.$transaction(async (tx) => {
+            // Delete the specific old token (acts like a "lock")
+            const deleted = await tx.refreshToken.deleteMany({
+                where: { userId, hashedToken: oldHashedToken },
+            });
+
+            if (deleted.count === 0) {
+                // Another request likely rotated/deleted it first → treat as reuse/race
+                const err = new Error("TOKEN_ALREADY_ROTATED_OR_REUSED");
+                (err as any).code = "TOKEN_REUSE_OR_RACE";
+                throw err;
+            }
+
+            // Create the new token record
+            return tx.refreshToken.create({
+                data: {
+                    userId,
+                    hashedToken: newHashedToken,
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),                    
+                },
+            });
+        });
+    }
+
+    /**
+     * (Optional legacy) Issue a new access token from a valid refresh token string.
+     * You likely won't call this now that controller does full rotation flow.
+     */
+    async refreshAccessToken(token: string): Promise<string | null> {
         const tokenInDb = await refreshTokenRepository.findByToken(token);
-        if (!tokenInDb) {
-            return null;
-        }
+        if (!tokenInDb) return null;
 
         const decoded = jwt.verify(token, process.env.REFRESH_SECRET!) as { id: string };
         const user = await userRepository.findUserById(decoded.id);
-        if (!user) {
-            return null;
-        }
+        if (!user) return null;
 
         const { accessToken } = generateTokens(user);
         return accessToken;
