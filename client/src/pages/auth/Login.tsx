@@ -3,8 +3,7 @@ import InputComponent from "../../components/form/InputComponent";
 import PasswordComponent from "../../components/form/PasswordComponent";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { loginUser } from "../../apis/auth.api";
+import { useAuth } from "../../hooks/useAuth";
 
 interface LoginFormProps {
   email: string;
@@ -17,35 +16,31 @@ const Login = () => {
     password: "",
   });
 
-  const queryClient = useQueryClient();
+  const { login } = useAuth();
   const navigate = useNavigate();
-
-  const { mutate: login, isPending: isLoading } = useMutation({
-    mutationFn: loginUser,
-    onSuccess: (response) => {
-      if (response.status === 200) {
-        const { user } = response.data.data;
-        queryClient.setQueryData(["me"], user);
-
-        toast.success("Login Successful!");
-        navigate("/");
-      } else {
-        toast.error("Failed to login!");
-      }
-    },
-    onError: (error) => {
-      console.error("Login Error:", error);
-      toast.error("Internal Server Error");
-    },
-  });
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLoginData({ ...loginData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    login(loginData);
+    setIsLoading(true);
+    try {
+      await login(loginData.email, loginData.password);
+      toast.success("Login Successful!");
+      navigate("/");
+    } catch (err: any) {
+      console.error("Login error:", err);
+      if (err.response?.status === 401) {
+        toast.error("Invalid credentials");
+      } else {
+        toast.error("Failed to login. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -86,7 +81,10 @@ const Login = () => {
             />
             <span>Remember me</span>
           </label>
-          <Link to="/auth/forgot-password" className="text-sm text-primary hover:underline">
+          <Link
+            to="/auth/forgot-password"
+            className="text-sm text-primary hover:underline"
+          >
             Forgot password?
           </Link>
         </div>

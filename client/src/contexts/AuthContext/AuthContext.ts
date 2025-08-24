@@ -8,8 +8,9 @@ export interface User{
 
 export interface AuthContextType {
   user: User | null;
+  login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>;
-  refetchMe: () => Promise<void>;
+  fetchMe: () => Promise<User | null>;
   isLoading: boolean;
 }
 

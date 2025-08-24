@@ -56,13 +56,16 @@ class AuthService {
         await refreshTokenRepository.create({
             hashedToken: hashedRefreshToken,
             userId: user.id,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         });
 
         return { accessToken, refreshToken, user };
     }
 
     async logout(refreshToken: string): Promise<void> {
+        console.log('token:', refreshToken);
         const tokenInDb = await refreshTokenRepository.findByToken(refreshToken);
+        console.log('token in db: ', tokenInDb);
 
         if (tokenInDb) {
             await refreshTokenRepository.delete(tokenInDb.id);
@@ -70,12 +73,13 @@ class AuthService {
     }
 
     async refreshToken(token: string): Promise<string | null> {
+        console.log('inside refreshToken service');
         const tokenInDb = await refreshTokenRepository.findByToken(token);
         if (!tokenInDb) {
             return null;
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as { id: string };
+        const decoded = jwt.verify(token, process.env.REFRESH_SECRET!) as { id: string };
         const user = await userRepository.findUserById(decoded.id);
         if (!user) {
             return null;

@@ -24,5 +24,7 @@ model RefreshToken {
   hashedToken String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
   createdAt DateTime @default(now())
+  rotated   Boolean  @default(false)
 }

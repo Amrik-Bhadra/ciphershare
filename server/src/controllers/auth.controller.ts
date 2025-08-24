@@ -1,5 +1,11 @@
 import { Request, Response } from "express";
 import authServices from "../services/auth.services";
+import { IRequestWithUser } from "../middlewares/auth.middleware";
+import crypto from "crypto";
+import refreshTokenRepository from "../repositories/refreshToken.repository";
+import jwt from "jsonwebtoken";
+import userRepository from "../repositories/user.repository";
+
 
 class AuthController {
     async register(req: Request, res: Response) {
@@ -58,18 +64,104 @@ class AuthController {
 
     async refreshToken(req: Request, res: Response) {
         try {
+            // get refreshToken from cookie
             const { refreshToken } = req.cookies;
+
+            // check if refreshToken present in cookie
             if (!refreshToken) {
-                return res.status(401).json({ message: 'No refresh token provided' });
+                return res.status(401).json({ message: 'Refresh token not available' });
             }
 
-            const newAccessToken = await authServices.refreshToken(refreshToken);
-            if (!newAccessToken) {
-                return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+            // validate the refreshToken with token stored in db
+            const tokenInDb = await refreshTokenRepository.findByToken(refreshToken);
+
+            // if not then clear the cookie
+            if (!tokenInDb) {
+                console.log('clearing httpOnly cookie');
+                res.clearCookie('refreshToken', {
+                    httpOnly: true,
+                    secure: process.env.ENVIRONMENT === 'production',
+                    sameSite: 'strict'
+                });
+                return res.status(403).json({ message: "Invalid refresh token. Session revoked." });
             }
-            res.status(200).json({ accessToken: newAccessToken });
+
+            // check if the token has expired or not
+            if (tokenInDb.expiresAt.getTime() < Date.now()) {
+                await refreshTokenRepository.delete(tokenInDb.id);
+                res.clearCookie('refreshToken', {
+                    httpOnly: true,
+                    secure: process.env.ENVIRONMENT === 'production',
+                    sameSite: 'strict'
+                });
+                return res.status(403).json({ message: "Refresh token expired" });
+            }
+
+            // detect reuse (rotate token resue attack)
+            if (tokenInDb.rotated) {
+                await refreshTokenRepository.deleteAllForUser(tokenInDb.userId);
+                return res.status(403).json({ message: "Token reuse detected, logged out everywhere" });
+            }
+
+            // Rotate token: mark old one as used
+            await refreshTokenRepository.markAsRotated(tokenInDb.id);
+
+            const user = await userRepository.findUserById(tokenInDb.userId);
+            if (!user) {
+                return res.status(401).json({ message: 'User not found!' });
+            }
+
+            // 7. Generate new tokens
+            const accessToken = jwt.sign(
+                { id: user?.id, role: user?.role },
+                process.env.JWT_SECRET!,
+                { expiresIn: "15m" }
+            );
+
+            const newRefreshToken = jwt.sign(
+                { id: user?.id, role: user?.role },
+                process.env.REFRESH_SECRET!,
+                { expiresIn: "7d" }
+            );
+
+            // hash the refresh token
+            const hashedToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+            
+            // create new refresh token record in database
+            await refreshTokenRepository.create({
+                hashedToken,
+                userId: user.id,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            });
+
+            // set new refresh token
+            res.cookie("refreshToken", newRefreshToken, {
+                httpOnly: true,
+                secure: true,
+                sameSite: "strict",
+                path: "/",
+                maxAge: 7 * 24 * 60 * 60 * 1000, 
+            });
+
+            // Send access token in response body
+            return res.json({ accessToken });
+
         } catch (error) {
-            return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+            console.error("Refresh token error:", error);
+            return res.status(403).json({ message: "Invalid or expired refresh token." });
+        }
+    }
+
+
+    async getMe(req: IRequestWithUser, res: Response) {
+        try {
+            const user = req.user;
+            (user as any).password = undefined;
+
+            res.status(200).json({ message: 'User data found', user });
+        } catch (error) {
+            console.log('GetMe Controller error:', error);
+            res.status(500).json({ message: 'An unexpected error occurred' });
         }
     }
 }

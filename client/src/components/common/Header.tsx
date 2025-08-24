@@ -9,7 +9,7 @@ const Header = () => {
       <nav className="w-[90%] mx-auto flex justify-between items-center">
         <NavLink to="/">
           <p className="text-lg dark:text-gray-200 text-gray-800 font-semibold">
-            The Vocab Deck
+            CipherShare
           </p>
         </NavLink>
         <AvtarComponent
