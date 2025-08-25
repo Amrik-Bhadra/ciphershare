@@ -16,7 +16,14 @@ model User {
   role      String   @default("user")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   refreshTokens RefreshToken[]
+
+  // --- Add these fields ---
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
+  workspaces      WorkspaceMember[]
+  createdChannels Channel[]         @relation("ChannelCreator")
+  channels        ChannelMember[]
 }
 
 model RefreshToken {
@@ -27,4 +34,69 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
   rotated   Boolean  @default(false)
+}
+
+model Workspace {
+  id         String   @id @default(uuid())
+  name       String
+  code       String   @unique // 9-digit code like xxx-yyy-zzz
+  createdBy  String
+  owner      User     @relation("WorkspaceOwner", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  members    WorkspaceMember[]
+  channels   Channel[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+model WorkspaceMember {
+  id         String   @id @default(uuid())
+  userId     String
+  workspaceId String
+  role       WorkspaceRole @default(MEMBER)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  joinedAt   DateTime @default(now())
+
+  @@unique([userId, workspaceId])
+}
+
+model Channel {
+  id          String   @id @default(uuid())
+  name        String
+  workspaceId String
+  createdBy   String
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User      @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  members     ChannelMember[]
+  files       String[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
+model ChannelMember {
+  id        String   @id @default(uuid())
+  userId    String
+  channelId String
+  role      String   @default("member")
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  joinedAt  DateTime @default(now())
+
+  @@unique([userId, channelId])
 }

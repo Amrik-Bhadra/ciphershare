@@ -17,6 +17,12 @@ class UserRepository implements IUserRepository {
         })
     }
 
+    async findByEmails(emails: string[]): Promise<User[]> {
+        return prisma.user.findMany({
+            where: { email: { in: emails } }
+        });
+    }
+
     async findUserById(id: string): Promise<User | null> {
         return prisma.user.findUnique({
             where: {

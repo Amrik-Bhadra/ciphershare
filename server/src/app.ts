@@ -4,6 +4,8 @@ import cors from "cors";
 
 import authRoutes from "./routes/auth.route";
 import fileRoutes from "./routes/file.route";
+import workspaceRoutes from "./routes/workspace.route";
+import errorHandler from "./middlewares/error.middleware";
 
 const app = express();
 
@@ -18,6 +20,9 @@ app.use(cookieparser());
 
 app.use('/ciphershare-api/v1/auth', authRoutes);
 app.use('/ciphershare-api/v1/file', fileRoutes);
+app.use('/ciphershare-api/v1/workspace', workspaceRoutes);
+
+app.use(errorHandler);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello World');
